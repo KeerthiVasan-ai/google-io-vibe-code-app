@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'screens/home_screen.dart';
 
 void main() {
@@ -15,9 +16,10 @@ class CivicResponseTrackerApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF006B5E), // Teal/Emerald base
+          seedColor: const Color(0xFF00B4D8), // Cyan/Blue gradient base
           brightness: Brightness.light,
         ),
+        textTheme: GoogleFonts.outfitTextTheme(),
         useMaterial3: true,
         appBarTheme: const AppBarTheme(
           centerTitle: true,
@@ -30,9 +32,10 @@ class CivicResponseTrackerApp extends StatelessWidget {
       ),
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF006B5E),
+          seedColor: const Color(0xFF00B4D8),
           brightness: Brightness.dark,
         ),
+        textTheme: GoogleFonts.outfitTextTheme(ThemeData.dark().textTheme),
         useMaterial3: true,
       ),
       themeMode: ThemeMode.system,
