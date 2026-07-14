@@ -1,44 +1,37 @@
-name: Flutter Android Build & Deploy
+name: Deploy to GitHub Pages
 
 on:
   push:
     branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
+
+# Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+permissions:
+  contents: write
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.1' # Adjust this to your specific Flutter stable version if not using 3.41.1 (which may be a typo for 3.24.1)
+          flutter-version: '3.41.1' # Updated to match your local SDK and Dart 3.11.0 requirement
           channel: 'stable'
           cache: true
 
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Analyze project
-        run: flutter analyze
+      - name: Build Web App
+        # The base-href must match your repository name for GitHub Pages to route correctly
+        run: flutter build web --release --base-href "/google-io-vibe-code-app/"
 
-      - name: Build APK
-        run: flutter build apk --release
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 7
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
