@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/issue_report.dart';
 
 class ReportIssueScreen extends StatefulWidget {
@@ -16,41 +20,91 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
   
   String _detectedCategory = 'Analyzing...';
   bool _isAnalyzing = false;
-  bool _imageSelected = false;
+  
+  XFile? _selectedImage;
+  Uint8List? _imageBytes;
 
-  void _simulateImageCapture() {
-    setState(() {
-      _imageSelected = true;
-      _isAnalyzing = true;
-    });
-    
-    // Simulate AI categorization delay
-    Future.delayed(const Duration(seconds: 2), () {
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickAndAnalyzeImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      if (image == null) return;
+
+      final bytes = await image.readAsBytes();
+
+      if (!mounted) return;
+      setState(() {
+        _selectedImage = image;
+        _imageBytes = bytes;
+        _isAnalyzing = true;
+        _detectedCategory = 'Analyzing...';
+      });
+
+      const apiKey = String.fromEnvironment('GEMINI_API_KEY');
+      if (apiKey.isEmpty) {
+        throw Exception('API Key is missing. Pass it via --dart-define=GEMINI_API_KEY=your_key');
+      }
+      final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: apiKey);
+
+      final prompt = TextPart('''
+Analyze this image of a civic infrastructure issue. 
+Return a single JSON object with exactly these three keys:
+- "title": A short, concise title (max 5 words).
+- "description": A detailed explanation of the issue seen in the photo.
+- "category": Must be one of ["Flooding", "Road Maintenance", "Utility Failure", "General Issue"].
+
+Output ONLY valid JSON without any markdown formatting or code blocks.
+''');
+      
+      final imagePart = DataPart(image.mimeType ?? 'image/jpeg', bytes);
+
+      final response = await model.generateContent([
+        Content.multi([prompt, imagePart])
+      ]);
+
+      if (response.text != null) {
+        String jsonString = response.text!.trim();
+        if (jsonString.startsWith('```json')) {
+          jsonString = jsonString.substring(7);
+        }
+        if (jsonString.startsWith('```')) {
+          jsonString = jsonString.substring(3);
+        }
+        if (jsonString.endsWith('```')) {
+          jsonString = jsonString.substring(0, jsonString.length - 3);
+        }
+        
+        final data = jsonDecode(jsonString.trim());
+        
+        if (mounted) {
+          setState(() {
+            _titleController.text = data['title'] ?? '';
+            _descController.text = data['description'] ?? '';
+            _detectedCategory = data['category'] ?? 'General Issue';
+            _isAnalyzing = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('AI auto-filled the report!')),
+          );
+        }
+      }
+    } catch (e) {
       if (mounted) {
         setState(() {
           _isAnalyzing = false;
-          // Mock AI result based on text description
-          if (_descController.text.toLowerCase().contains('water') || 
-              _descController.text.toLowerCase().contains('flood')) {
-            _detectedCategory = 'Flooding';
-          } else if (_descController.text.toLowerCase().contains('road') || 
-                     _descController.text.toLowerCase().contains('pothole')) {
-            _detectedCategory = 'Road Maintenance';
-          } else {
-            _detectedCategory = 'General Issue';
-          }
+          _detectedCategory = 'General Issue';
         });
-        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('AI categorized issue as: $_detectedCategory')),
+          SnackBar(content: Text('AI Analysis failed: $e')),
         );
       }
-    });
+    }
   }
 
   void _submitReport() {
     if (_formKey.currentState!.validate()) {
-      if (!_imageSelected) {
+      if (_selectedImage == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please add a photo first')),
         );
@@ -92,7 +146,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
           children: [
             // Photo Area
             GestureDetector(
-              onTap: _simulateImageCapture,
+              onTap: _pickAndAnalyzeImage,
               child: Container(
                 height: 200,
                 decoration: BoxDecoration(
@@ -102,11 +156,17 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                     color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
                   ),
                 ),
-                child: _imageSelected 
+                child: _selectedImage != null && _imageBytes != null
                     ? Stack(
                         fit: StackFit.expand,
                         children: [
-                          Icon(Icons.image, size: 80, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(15),
+                            child: Image.memory(
+                              _imageBytes!,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                           if (_isAnalyzing)
                             Container(
                               decoration: BoxDecoration(
@@ -137,6 +197,13 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                               color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'AI will automatically generate the report',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                            ),
+                          ),
                         ],
                       ),
               ),
@@ -144,7 +211,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
             const SizedBox(height: 24),
             
             // AI Category Tag
-            if (_imageSelected && !_isAnalyzing)
+            if (_selectedImage != null && !_isAnalyzing)
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -176,12 +243,6 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                           ),
                         ],
                       ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        // Allow manual override
-                      },
-                      child: const Text('EDIT'),
                     ),
                   ],
                 ),

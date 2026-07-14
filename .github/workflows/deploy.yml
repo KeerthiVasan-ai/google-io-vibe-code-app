@@ -28,7 +28,7 @@ jobs:
 
       - name: Build Web App
         # The base-href must match your repository name for GitHub Pages to route correctly
-        run: flutter build web --release --base-href "/google-io-vibe-code-app/"
+        run: flutter build web --release --base-href "/google-io-vibe-code-app/" --dart-define=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
